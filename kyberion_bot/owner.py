@@ -1,9 +1,9 @@
-"""Owner-бот: отдельный бот для владельца.
+"""Owner-бот: окремий бот для власника.
 
-Только владельческие функции: клубы, приглашение/удаление управляющих,
-статистика по всем клубам. Задачи, смены и рутина живут в основном боте —
-там владелец при желании участвует как обычный управляющий
-(добавляет себя инвайт-ссылкой из этого бота).
+Тільки власницькі функції: клуби, запрошення/видалення керівників,
+статистика по всіх клубах. Задачі, зміни та рутина живуть в основному боті —
+там власник за бажанням бере участь як звичайний керівник
+(додає себе інвайт-посиланням із цього бота).
 """
 
 from aiogram import F, Router
@@ -21,6 +21,7 @@ from .keyboards import (
     ClubCb,
     PeopleCb,
     UserCb,
+    cancel_kb,
     clubs_admin_menu,
     clubs_list,
     confirm_kb,
@@ -32,7 +33,7 @@ from .keyboards import (
 )
 
 router = Router()
-# Бот приватный: любые апдейты не от владельца игнорируем
+# Бот приватний: будь-які апдейти не від власника ігноруємо
 router.message.filter(F.from_user.id == OWNER_TG_ID)
 router.callback_query.filter(F.from_user.id == OWNER_TG_ID)
 
@@ -42,14 +43,14 @@ class NewClub(StatesGroup):
 
 
 async def send_menu(message: Message) -> None:
-    await message.answer("👑 Меню владельца", reply_markup=owner_menu())
+    await message.answer("👑 Меню власника", reply_markup=owner_menu())
 
 
 @router.message(CommandStart())
 async def cmd_start(message: Message, state: FSMContext) -> None:
     await state.clear()
     await message.answer(
-        "👑 Бот владельца. Меню открывается кнопкой <b>«☰ Меню»</b> внизу или командой /menu.",
+        "👑 Бот власника. Меню відкривається кнопкою <b>«☰ Меню»</b> внизу або командою /menu.",
         reply_markup=main_reply_kb(),
     )
     await send_menu(message)
@@ -78,13 +79,13 @@ async def cb_back(call: CallbackQuery, state: FSMContext) -> None:
     await call.answer()
 
 
-# ---------- Клубы ----------
+# ---------- Клуби ----------
 
 
 @router.callback_query(F.data == "menu:clubs")
 async def cb_clubs(call: CallbackQuery, session: AsyncSession) -> None:
     clubs = await services.all_clubs(session)
-    text = "🏢 <b>Клубы</b>\nНажмите на клуб, чтобы удалить его." if clubs else "🏢 Клубов пока нет."
+    text = "🏢 <b>Клуби</b>\nНатисніть на клуб, щоб видалити його." if clubs else "🏢 Клубів поки немає."
     await call.message.edit_text(text, reply_markup=clubs_admin_menu(clubs))
     await call.answer()
 
@@ -92,7 +93,7 @@ async def cb_clubs(call: CallbackQuery, session: AsyncSession) -> None:
 @router.callback_query(ClubAdminCb.filter(F.action == "new"))
 async def cb_club_new(call: CallbackQuery, state: FSMContext) -> None:
     await state.set_state(NewClub.name)
-    await call.message.edit_text("Название нового клуба:")
+    await call.message.edit_text("Назва нового клубу:", reply_markup=cancel_kb())
     await call.answer()
 
 
@@ -100,14 +101,14 @@ async def cb_club_new(call: CallbackQuery, state: FSMContext) -> None:
 async def msg_club_name(message: Message, session: AsyncSession, state: FSMContext) -> None:
     await state.clear()
     club = await services.create_club(session, message.text.strip())
-    await message.answer(f"✅ Клуб <b>{club.name}</b> создан. /menu")
+    await message.answer(f"✅ Клуб <b>{club.name}</b> створено. /menu")
 
 
 @router.callback_query(ClubAdminCb.filter(F.action == "del"))
 async def cb_club_del(call: CallbackQuery, callback_data: ClubAdminCb, session: AsyncSession) -> None:
     club = await session.get(services.Club, callback_data.club_id)
     await call.message.edit_text(
-        f"Удалить клуб <b>{club.name}</b>? Задачи и история сохранятся, но клуб исчезнет из меню.",
+        f"Видалити клуб <b>{club.name}</b>? Задачі та історія збережуться, але клуб зникне з меню.",
         reply_markup=confirm_kb(ClubAdminCb(action="del_yes", club_id=club.id)),
     )
     await call.answer()
@@ -119,18 +120,18 @@ async def cb_club_del_yes(
 ) -> None:
     club = await session.get(services.Club, callback_data.club_id)
     await services.deactivate_club(session, callback_data.club_id)
-    await call.message.edit_text(f"🗑 Клуб <b>{club.name}</b> удалён.")
+    await call.message.edit_text(f"🗑 Клуб <b>{club.name}</b> видалено.")
     await call.answer()
 
 
-# ---------- Управляющие ----------
+# ---------- Керівники ----------
 
 
 @router.callback_query(F.data == "menu:people")
 async def cb_people(call: CallbackQuery, session: AsyncSession) -> None:
     clubs = await services.all_clubs(session)
     if not clubs:
-        await call.answer("Сначала создайте клуб", show_alert=True)
+        await call.answer("Спочатку створіть клуб", show_alert=True)
         return
     await call.message.edit_text("Клуб:", reply_markup=clubs_list(clubs, "people"))
     await call.answer()
@@ -144,8 +145,8 @@ async def cb_people_club(call: CallbackQuery, callback_data: ClubCb, session: As
     if members:
         lines += [f"• {u.name} — {ROLE_LABELS[r]}" for u, r in members]
     else:
-        lines.append("Пока никого нет.")
-    lines.append("\nВладелец приглашает и удаляет только управляющих.")
+        lines.append("Поки нікого немає.")
+    lines.append("\nВласник запрошує і видаляє лише керівників.")
     await call.message.edit_text("\n".join(lines), reply_markup=people_menu(club.id))
     await call.answer()
 
@@ -154,15 +155,15 @@ async def cb_people_club(call: CallbackQuery, callback_data: ClubCb, session: As
 async def cb_invite_create(
     call: CallbackQuery, callback_data: PeopleCb, session: AsyncSession, main_bot_username: str
 ) -> None:
-    # owner приглашает только управляющих, роль не спрашиваем
+    # owner запрошує лише керівників, роль не питаємо
     invite = await services.create_invite(session, callback_data.club_id, ROLE_MANAGER)
     club = await session.get(services.Club, callback_data.club_id)
     link = f"https://t.me/{main_bot_username}?start={invite.code}"
     await call.message.edit_text(
-        f"🔗 Одноразовая ссылка-приглашение\n"
+        f"🔗 Одноразове посилання-запрошення\n"
         f"Клуб: <b>{club.name}</b>, роль: <b>{ROLE_LABELS[ROLE_MANAGER]}</b>\n\n"
-        f"{link}\n\nСсылка ведёт в основной бот задач. Отправьте её человеку — "
-        f"или перейдите сами, чтобы работать в клубе как управляющий."
+        f"{link}\n\nПосилання веде в основний бот задач. Надішліть його людині — "
+        f"або перейдіть самі, щоб працювати в клубі як керівник."
     )
     await call.answer()
 
@@ -172,10 +173,10 @@ async def cb_remove_list(call: CallbackQuery, callback_data: PeopleCb, session: 
     members = await services.club_members(session, callback_data.club_id)
     managers = [u for u, r in members if r == ROLE_MANAGER]
     if not managers:
-        await call.answer("В клубе нет управляющих", show_alert=True)
+        await call.answer("У клубі немає керівників", show_alert=True)
         return
     await call.message.edit_text(
-        "Какого управляющего удалить из клуба?",
+        "Якого керівника видалити з клубу?",
         reply_markup=users_list(managers, callback_data.club_id, "rmv"),
     )
     await call.answer()
@@ -185,7 +186,7 @@ async def cb_remove_list(call: CallbackQuery, callback_data: PeopleCb, session: 
 async def cb_remove_confirm(call: CallbackQuery, callback_data: UserCb, session: AsyncSession) -> None:
     user = await services.user_by_id(session, callback_data.user_id)
     await call.message.edit_text(
-        f"Удалить <b>{user.name}</b> из клуба?",
+        f"Видалити <b>{user.name}</b> з клубу?",
         reply_markup=confirm_kb(
             UserCb(action="rmv_yes", club_id=callback_data.club_id, user_id=callback_data.user_id)
         ),
@@ -197,7 +198,7 @@ async def cb_remove_confirm(call: CallbackQuery, callback_data: UserCb, session:
 async def cb_remove_do(call: CallbackQuery, callback_data: UserCb, session: AsyncSession) -> None:
     user = await services.user_by_id(session, callback_data.user_id)
     await services.remove_member(session, callback_data.user_id, callback_data.club_id)
-    await call.message.edit_text(f"➖ {user.name} удалён(а) из клуба.")
+    await call.message.edit_text(f"➖ {user.name} видалено з клубу.")
     await call.answer()
 
 
@@ -207,15 +208,15 @@ async def cb_remove_do(call: CallbackQuery, callback_data: UserCb, session: Asyn
 @router.callback_query(F.data == "menu:stats")
 async def cb_stats(call: CallbackQuery, session: AsyncSession) -> None:
     clubs = await services.all_clubs(session)
-    lines = ["📊 <b>Статистика за сегодня</b>\n"]
+    lines = ["📊 <b>Статистика за сьогодні</b>\n"]
     for club in clubs:
         s = await services.club_stats(session, club.id)
         lines.append(
-            f"<b>{club.name}</b>: открыто {s['open']}, "
-            f"выполнено {s['done']}, отказов {s['declined']}"
+            f"<b>{club.name}</b>: відкрито {s['open']}, "
+            f"виконано {s['done']}, відмов {s['declined']}"
         )
     if not clubs:
-        lines.append("Клубов пока нет.")
+        lines.append("Клубів поки немає.")
     try:
         await call.message.edit_text("\n".join(lines), reply_markup=to_menu_kb())
     except Exception:

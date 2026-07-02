@@ -20,15 +20,16 @@ ROLE_SENIOR = "senior_admin"
 ROLE_ADMIN = "admin"
 
 ROLE_LABELS = {
-    ROLE_MANAGER: "Управляющий",
-    ROLE_SENIOR: "Старший админ",
-    ROLE_ADMIN: "Админ",
+    ROLE_MANAGER: "Керівник",
+    ROLE_SENIOR: "Старший адмін",
+    ROLE_ADMIN: "Адмін",
 }
 
 # Статусы задач
 STATUS_OPEN = "open"
 STATUS_DONE = "done"
 STATUS_DECLINED = "declined"
+STATUS_CANCELED = "canceled"  # создатель отменил задачу
 
 
 class Base(DeclarativeBase):

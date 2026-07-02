@@ -10,11 +10,11 @@ from .db import ROLE_LABELS, ROLE_MANAGER, ROLE_SENIOR, Club, Task, TaskTemplate
 
 BACK_CB = "menu:back"
 BACK_TEXT = "⬅️ Назад"
-MENU_TEXT = "🏠 В меню"
+MENU_TEXT = "🏠 У меню"
 
 
 def main_reply_kb() -> ReplyKeyboardMarkup:
-    """Постоянная кнопка под полем ввода — открыть меню без набора команд."""
+    """Постійна кнопка під полем вводу — відкрити меню без набору команд."""
     return ReplyKeyboardMarkup(
         keyboard=[[KeyboardButton(text="☰ Меню")]],
         resize_keyboard=True,
@@ -23,13 +23,20 @@ def main_reply_kb() -> ReplyKeyboardMarkup:
 
 
 def to_menu_kb() -> InlineKeyboardMarkup:
-    """Одна кнопка «В меню» — для финальных сообщений, чтобы вернуться без команд."""
+    """Одна кнопка «У меню» — для фінальних повідомлень, щоб повернутися без команд."""
     kb = InlineKeyboardBuilder()
     kb.button(text=MENU_TEXT, callback_data=BACK_CB)
     return kb.as_markup()
 
 
-# action: checkin | task | people | routine | stats | club_del
+def cancel_kb() -> InlineKeyboardMarkup:
+    """Кнопка «Скасувати» для кроків із вводом тексту (вийти з вводу в меню)."""
+    kb = InlineKeyboardBuilder()
+    kb.button(text="❌ Скасувати", callback_data=BACK_CB)
+    return kb.as_markup()
+
+
+# action: checkin | task | people | routine | stats | club_del | bind
 class ClubCb(CallbackData, prefix="club"):
     action: str
     club_id: int
@@ -47,7 +54,7 @@ class UserCb(CallbackData, prefix="usr"):
     user_id: int
 
 
-# action: done | decline
+# action: done | decline | cancel
 class TaskCb(CallbackData, prefix="task"):
     action: str
     task_id: int
@@ -73,10 +80,10 @@ class PeopleCb(CallbackData, prefix="ppl"):
 
 
 def owner_menu() -> InlineKeyboardMarkup:
-    """Меню owner-бота: только клубы, управляющие и статистика."""
+    """Меню owner-бота: тільки клуби, керівники та статистика."""
     kb = InlineKeyboardBuilder()
-    kb.button(text="🏢 Клубы", callback_data="menu:clubs")
-    kb.button(text="👥 Управляющие", callback_data="menu:people")
+    kb.button(text="🏢 Клуби", callback_data="menu:clubs")
+    kb.button(text="👥 Керівники", callback_data="menu:people")
     kb.button(text="📊 Статистика", callback_data="menu:stats")
     kb.adjust(1)
     return kb.as_markup()
@@ -85,14 +92,14 @@ def owner_menu() -> InlineKeyboardMarkup:
 def main_menu(roles: set[str], on_shift: bool) -> InlineKeyboardMarkup:
     kb = InlineKeyboardBuilder()
     if on_shift:
-        kb.button(text="🔴 Закрыть смену", callback_data="shift:close")
+        kb.button(text="🔴 Закрити зміну", callback_data="shift:close")
     else:
-        kb.button(text="🟢 Я на смене", callback_data="shift:open")
-    kb.button(text="📋 Мои задачи", callback_data="menu:my_tasks")
-    if roles & {ROLE_MANAGER, ROLE_SENIOR}:  # видят все задачи своих клубов
-        kb.button(text="🗂 Все задачи", callback_data="menu:all_tasks")
-    if roles:  # любой с ролью может ставить (минимум — себе)
-        kb.button(text="➕ Поставить задачу", callback_data="menu:new_task")
+        kb.button(text="🟢 Я на зміні", callback_data="shift:open")
+    kb.button(text="📋 Мої задачі", callback_data="menu:my_tasks")
+    if roles & {ROLE_MANAGER, ROLE_SENIOR}:  # бачать усі задачі своїх клубів
+        kb.button(text="🗂 Усі задачі", callback_data="menu:all_tasks")
+    if roles:  # будь-хто з роллю може ставити (мінімум — собі)
+        kb.button(text="➕ Поставити задачу", callback_data="menu:new_task")
     if roles & {ROLE_MANAGER, ROLE_SENIOR}:
         kb.button(text="🔁 Рутина", callback_data="menu:routine")
     if ROLE_MANAGER in roles:
@@ -112,7 +119,7 @@ def clubs_list(clubs: list[Club], action: str) -> InlineKeyboardMarkup:
 
 
 def clubs_bind_kb(clubs: list[Club]) -> InlineKeyboardMarkup:
-    """Выбор клуба для привязки группы (в чате группы, без кнопки «Назад»)."""
+    """Вибір клубу для прив'язки групи (у чаті групи, без кнопки «Назад»)."""
     kb = InlineKeyboardBuilder()
     for club in clubs:
         kb.button(text=club.name, callback_data=ClubCb(action="bind", club_id=club.id))
@@ -140,9 +147,18 @@ def users_list(users: list[User], club_id: int, action: str) -> InlineKeyboardMa
 
 def task_actions(task: Task) -> InlineKeyboardMarkup:
     kb = InlineKeyboardBuilder()
-    kb.button(text="✅ Выполнено", callback_data=TaskCb(action="done", task_id=task.id))
-    kb.button(text="🚫 Не могу", callback_data=TaskCb(action="decline", task_id=task.id))
+    kb.button(text="✅ Виконано", callback_data=TaskCb(action="done", task_id=task.id))
+    kb.button(text="🚫 Не можу", callback_data=TaskCb(action="decline", task_id=task.id))
     kb.adjust(2)
+    return kb.as_markup()
+
+
+def task_created_kb(task_id: int) -> InlineKeyboardMarkup:
+    """Під підтвердженням поставленої задачі: скасувати (автору) або у меню."""
+    kb = InlineKeyboardBuilder()
+    kb.button(text="❌ Скасувати задачу", callback_data=TaskCb(action="cancel", task_id=task_id))
+    kb.button(text=MENU_TEXT, callback_data=BACK_CB)
+    kb.adjust(1)
     return kb.as_markup()
 
 
@@ -154,7 +170,7 @@ def templates_list(templates: list[TaskTemplate], club_id: int) -> InlineKeyboar
             text=f"{mark} {t.time_hhmm} {t.title}",
             callback_data=TplCb(action="open", club_id=club_id, tpl_id=t.id),
         )
-    kb.button(text="➕ Добавить", callback_data=TplCb(action="add", club_id=club_id, tpl_id=0))
+    kb.button(text="➕ Додати", callback_data=TplCb(action="add", club_id=club_id, tpl_id=0))
     kb.button(text=BACK_TEXT, callback_data=BACK_CB)
     kb.adjust(1)
     return kb.as_markup()
@@ -162,9 +178,9 @@ def templates_list(templates: list[TaskTemplate], club_id: int) -> InlineKeyboar
 
 def template_actions(tpl: TaskTemplate, club_id: int) -> InlineKeyboardMarkup:
     kb = InlineKeyboardBuilder()
-    toggle_text = "⏸ Выключить" if tpl.is_active else "▶️ Включить"
+    toggle_text = "⏸ Вимкнути" if tpl.is_active else "▶️ Увімкнути"
     kb.button(text=toggle_text, callback_data=TplCb(action="toggle", club_id=club_id, tpl_id=tpl.id))
-    kb.button(text="🗑 Удалить", callback_data=TplCb(action="del", club_id=club_id, tpl_id=tpl.id))
+    kb.button(text="🗑 Видалити", callback_data=TplCb(action="del", club_id=club_id, tpl_id=tpl.id))
     kb.button(text=BACK_TEXT, callback_data=BACK_CB)
     kb.adjust(2, 1)
     return kb.as_markup()
@@ -172,19 +188,16 @@ def template_actions(tpl: TaskTemplate, club_id: int) -> InlineKeyboardMarkup:
 
 def confirm_kb(yes_cb: str | CallbackData, no_cb: str = "menu:back") -> InlineKeyboardMarkup:
     kb = InlineKeyboardBuilder()
-    if isinstance(yes_cb, CallbackData):
-        kb.button(text="✅ Да", callback_data=yes_cb)
-    else:
-        kb.button(text="✅ Да", callback_data=yes_cb)
-    kb.button(text="❌ Отмена", callback_data=no_cb)
+    kb.button(text="✅ Так", callback_data=yes_cb)
+    kb.button(text="❌ Скасувати", callback_data=no_cb)
     kb.adjust(2)
     return kb.as_markup()
 
 
 def people_menu(club_id: int) -> InlineKeyboardMarkup:
     kb = InlineKeyboardBuilder()
-    kb.button(text="➕ Пригласить", callback_data=PeopleCb(action="invite", club_id=club_id))
-    kb.button(text="➖ Удалить из клуба", callback_data=PeopleCb(action="remove", club_id=club_id))
+    kb.button(text="➕ Запросити", callback_data=PeopleCb(action="invite", club_id=club_id))
+    kb.button(text="➖ Видалити з клубу", callback_data=PeopleCb(action="remove", club_id=club_id))
     kb.button(text=BACK_TEXT, callback_data=BACK_CB)
     kb.adjust(1)
     return kb.as_markup()
@@ -194,7 +207,7 @@ def clubs_admin_menu(clubs: list[Club]) -> InlineKeyboardMarkup:
     kb = InlineKeyboardBuilder()
     for club in clubs:
         kb.button(text=f"🗑 {club.name}", callback_data=ClubAdminCb(action="del", club_id=club.id))
-    kb.button(text="➕ Создать клуб", callback_data=ClubAdminCb(action="new", club_id=0))
+    kb.button(text="➕ Створити клуб", callback_data=ClubAdminCb(action="new", club_id=0))
     kb.button(text=BACK_TEXT, callback_data=BACK_CB)
     kb.adjust(1)
     return kb.as_markup()

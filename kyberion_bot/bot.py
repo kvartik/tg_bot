@@ -25,7 +25,7 @@ def build_dispatcher() -> Dispatcher:
 
 async def main() -> None:
     await init_db()
-    menu_commands = [BotCommand(command="menu", description="Открыть меню")]
+    menu_commands = [BotCommand(command="menu", description="Відкрити меню")]
 
     bot = Bot(BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
     await bot.set_my_commands(menu_commands)

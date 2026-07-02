@@ -5,8 +5,18 @@ from aiogram.types import CallbackQuery, Message
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .. import services
-from ..db import STATUS_DECLINED, STATUS_DONE, STATUS_OPEN, Task, User
-from ..keyboards import ClubCb, TaskCb, UserCb, clubs_list, task_actions, to_menu_kb, users_list
+from ..db import STATUS_CANCELED, STATUS_DECLINED, STATUS_DONE, STATUS_OPEN, Task, User
+from ..keyboards import (
+    ClubCb,
+    TaskCb,
+    UserCb,
+    cancel_kb,
+    clubs_list,
+    task_actions,
+    task_created_kb,
+    to_menu_kb,
+    users_list,
+)
 from ..texts import fmt_deadline, fmt_task
 
 router = Router()
@@ -28,34 +38,34 @@ async def notify(bot: Bot, session: AsyncSession, user_id: int, text: str) -> No
     try:
         await bot.send_message(user.tg_id, text)
     except Exception:
-        pass  # пользователь мог заблокировать бота
+        pass  # користувач міг заблокувати бота
 
 
 async def notify_club_group(bot: Bot, session: AsyncSession, task: Task, text: str) -> None:
-    """Уведомление в группу клуба (если она привязана командой /bind)."""
+    """Сповіщення в групу клубу (якщо вона прив'язана командою /bind)."""
     club = await session.get(services.Club, task.club_id)
     if club is None or club.chat_id is None:
         return
     try:
         await bot.send_message(club.chat_id, text)
     except Exception:
-        pass  # бота могли удалить из группы
+        pass  # бота могли видалити з групи
 
 
-# ---------- Мои задачи ----------
+# ---------- Мої задачі ----------
 
 
 @router.callback_query(F.data == "menu:my_tasks")
 async def cb_my_tasks(call: CallbackQuery, session: AsyncSession, db_user: User) -> None:
     tasks = await services.open_tasks(session, db_user)
     if not tasks:
-        await call.answer("Открытых задач нет 🎉", show_alert=True)
+        await call.answer("Відкритих задач немає 🎉", show_alert=True)
         return
-    # заменяем сообщение меню заголовком, чтобы над карточками не висело «живое» меню
+    # замінюємо повідомлення меню заголовком, щоб над картками не висіло «живе» меню
     try:
-        await call.message.edit_text(f"📋 Открытых задач: {len(tasks)}")
+        await call.message.edit_text(f"📋 Відкритих задач: {len(tasks)}")
     except Exception:
-        await call.message.answer(f"📋 Открытых задач: {len(tasks)}")
+        await call.message.answer(f"📋 Відкритих задач: {len(tasks)}")
     for task in tasks:
         await call.message.answer(fmt_task(task), reply_markup=task_actions(task))
     await call.answer()
@@ -65,21 +75,21 @@ async def cb_my_tasks(call: CallbackQuery, session: AsyncSession, db_user: User)
 async def cb_all_tasks(call: CallbackQuery, session: AsyncSession, db_user: User) -> None:
     clubs = await services.supervisor_clubs(session, db_user)
     if not clubs:
-        await call.answer("Нет клубов под вашим управлением", show_alert=True)
+        await call.answer("Немає клубів під вашим керуванням", show_alert=True)
         return
-    lines = ["🗂 <b>Все открытые задачи</b>\n"]
+    lines = ["🗂 <b>Усі відкриті задачі</b>\n"]
     total = 0
     for club in clubs:
         club_tasks = await services.club_open_tasks(session, club.id)
         lines.append(f"<b>{club.name}</b>")
         if not club_tasks:
-            lines.append("• открытых задач нет")
+            lines.append("• відкритих задач немає")
         for task, assignee_name in club_tasks:
             total += 1
             lines.append(f"• {assignee_name}: {task.title} — {fmt_deadline(task.deadline)}")
         lines.append("")
     if total == 0:
-        await call.answer("Открытых задач нет 🎉", show_alert=True)
+        await call.answer("Відкритих задач немає 🎉", show_alert=True)
         return
     text = "\n".join(lines).strip()
     try:
@@ -95,19 +105,37 @@ async def cb_task_done(
 ) -> None:
     task = await session.get(Task, callback_data.task_id)
     if task is None or task.status != STATUS_OPEN:
-        await call.answer("Задача уже закрыта", show_alert=True)
+        await call.answer("Задачу вже закрито", show_alert=True)
         return
     if task.assignee_id != db_user.id:
-        await call.answer("Это не ваша задача", show_alert=True)
+        await call.answer("Це не ваша задача", show_alert=True)
         return
     await services.close_task(session, task, STATUS_DONE)
-    await call.message.edit_text(f"✅ Выполнено: <b>{task.title}</b>")
+    await call.message.edit_text(f"✅ Виконано: <b>{task.title}</b>")
     if task.creator_id != task.assignee_id:
-        await notify(bot, session, task.creator_id, f"✅ {db_user.name} выполнил(а): <b>{task.title}</b>")
+        await notify(bot, session, task.creator_id, f"✅ {db_user.name} виконав(ла): <b>{task.title}</b>")
     await notify_club_group(
-        bot, session, task, f"✅ <b>{db_user.name}</b> выполнил(а): {task.title}"
+        bot, session, task, f"✅ <b>{db_user.name}</b> виконав(ла): {task.title}"
     )
-    await call.answer("Отлично!")
+    await call.answer("Чудово!")
+
+
+@router.callback_query(TaskCb.filter(F.action == "cancel"))
+async def cb_task_cancel(
+    call: CallbackQuery, callback_data: TaskCb, session: AsyncSession, db_user: User, bot: Bot
+) -> None:
+    task = await session.get(Task, callback_data.task_id)
+    if task is None or task.status != STATUS_OPEN:
+        await call.answer("Задачу вже закрито", show_alert=True)
+        return
+    if task.creator_id != db_user.id:
+        await call.answer("Скасувати може лише той, хто поставив задачу", show_alert=True)
+        return
+    await services.close_task(session, task, STATUS_CANCELED)
+    await call.message.edit_text(f"❌ Задачу скасовано: <b>{task.title}</b>")
+    if task.assignee_id != task.creator_id:
+        await notify(bot, session, task.assignee_id, f"❌ Задачу скасовано: <b>{task.title}</b>")
+    await call.answer("Скасовано")
 
 
 @router.callback_query(TaskCb.filter(F.action == "decline"))
@@ -116,14 +144,17 @@ async def cb_task_decline(
 ) -> None:
     task = await session.get(Task, callback_data.task_id)
     if task is None or task.status != STATUS_OPEN:
-        await call.answer("Задача уже закрыта", show_alert=True)
+        await call.answer("Задачу вже закрито", show_alert=True)
         return
     if task.assignee_id != db_user.id:
-        await call.answer("Это не ваша задача", show_alert=True)
+        await call.answer("Це не ваша задача", show_alert=True)
         return
     await state.set_state(DeclineTask.reason)
     await state.update_data(task_id=task.id)
-    await call.message.answer(f"🚫 <b>{task.title}</b>\nУкажите причину отказа (обязательно):")
+    await call.message.answer(
+        f"🚫 <b>{task.title}</b>\nВкажіть причину відмови (обов'язково):",
+        reply_markup=cancel_kb(),
+    )
     await call.answer()
 
 
@@ -135,44 +166,44 @@ async def msg_decline_reason(
     task = await session.get(Task, data["task_id"])
     await state.clear()
     if task is None or task.status != STATUS_OPEN:
-        await message.answer("Задача уже закрыта.")
+        await message.answer("Задачу вже закрито.")
         return
     reason = message.text.strip()
     await services.close_task(session, task, STATUS_DECLINED, decline_reason=reason)
-    await message.answer(f"🚫 Отказ записан: <b>{task.title}</b>")
+    await message.answer(f"🚫 Відмову записано: <b>{task.title}</b>")
     if task.creator_id != task.assignee_id:
         await notify(
             bot, session, task.creator_id,
-            f"🚫 {db_user.name} не может выполнить: <b>{task.title}</b>\nПричина: {reason}",
+            f"🚫 {db_user.name} не може виконати: <b>{task.title}</b>\nПричина: {reason}",
         )
     await notify_club_group(
         bot, session, task,
-        f"🚫 <b>{db_user.name}</b> не смог(ла): {task.title}\nПричина: {reason}",
+        f"🚫 <b>{db_user.name}</b> не зміг(ла): {task.title}\nПричина: {reason}",
     )
 
 
-# ---------- Новая задача ----------
+# ---------- Нова задача ----------
 
 
 @router.callback_query(F.data == "menu:new_task")
 async def cb_new_task(call: CallbackQuery, session: AsyncSession, db_user: User) -> None:
     clubs = await services.user_clubs(session, db_user)
     if not clubs:
-        await call.answer("У вас нет клубов", show_alert=True)
+        await call.answer("У вас немає клубів", show_alert=True)
         return
     if len(clubs) == 1:
         await show_assignees(call, session, db_user, clubs[0].id)
         return
-    await call.message.edit_text("В каком клубе задача?", reply_markup=clubs_list(clubs, "task"))
+    await call.message.edit_text("У якому клубі задача?", reply_markup=clubs_list(clubs, "task"))
     await call.answer()
 
 
 async def show_assignees(call: CallbackQuery, session: AsyncSession, db_user: User, club_id: int) -> None:
     users = await services.assignable_users(session, db_user, club_id)
     if not users:
-        await call.answer("Некому ставить задачу в этом клубе", show_alert=True)
+        await call.answer("Немає кому ставити задачу в цьому клубі", show_alert=True)
         return
-    await call.message.edit_text("Кому поставить задачу?", reply_markup=users_list(users, club_id, "assign"))
+    await call.message.edit_text("Кому поставити задачу?", reply_markup=users_list(users, club_id, "assign"))
     await call.answer()
 
 
@@ -189,11 +220,14 @@ async def cb_task_assignee(
 ) -> None:
     assignee = await services.user_by_id(session, callback_data.user_id)
     if assignee is None or not await services.can_assign(session, db_user, assignee, callback_data.club_id):
-        await call.answer("Нет прав ставить задачу этому человеку", show_alert=True)
+        await call.answer("Немає прав ставити задачу цій людині", show_alert=True)
         return
     await state.set_state(NewTask.title)
     await state.update_data(club_id=callback_data.club_id, assignee_id=assignee.id)
-    await call.message.edit_text(f"Задача для <b>{assignee.name}</b>.\nВведите текст задачи:")
+    await call.message.edit_text(
+        f"Задача для <b>{assignee.name}</b>.\nВведіть текст задачі:",
+        reply_markup=cancel_kb(),
+    )
     await call.answer()
 
 
@@ -203,9 +237,10 @@ async def msg_task_title(message: Message, state: FSMContext) -> None:
     await state.set_state(NewTask.deadline)
     await message.answer(
         "Дедлайн?\n"
-        "• <code>ЧЧ:ММ</code> — сегодня (если время прошло — завтра)\n"
-        "• <code>ДД.ММ ЧЧ:ММ</code> — конкретная дата\n"
-        "• <code>-</code> — без дедлайна"
+        "• <code>ГГ:ХХ</code> — сьогодні (якщо час минув — завтра)\n"
+        "• <code>ДД.ММ ГГ:ХХ</code> — конкретна дата\n"
+        "• <code>-</code> — без дедлайну",
+        reply_markup=cancel_kb(),
     )
 
 
@@ -216,7 +251,7 @@ async def msg_task_deadline(
     try:
         deadline = services.parse_deadline(message.text)
     except (ValueError, IndexError):
-        await message.answer("Не понял формат. Примеры: <code>18:30</code>, <code>05.07 12:00</code>, <code>-</code>")
+        await message.answer("Не зрозумів формат. Приклади: <code>18:30</code>, <code>05.07 12:00</code>, <code>-</code>")
         return
     data = await state.get_data()
     await state.clear()
@@ -225,16 +260,16 @@ async def msg_task_deadline(
         session, data["club_id"], db_user, assignee, data["title"], deadline
     )
     await message.answer(
-        f"✅ Задача поставлена: <b>{task.title}</b>\n"
-        f"Исполнитель: {assignee.name}, {fmt_deadline(deadline)}",
-        reply_markup=to_menu_kb(),
+        f"✅ Задачу поставлено: <b>{task.title}</b>\n"
+        f"Виконавець: {assignee.name}, {fmt_deadline(deadline)}",
+        reply_markup=task_created_kb(task.id),
     )
     if assignee.id != db_user.id:
         try:
             await bot.send_message(
                 assignee.tg_id,
-                f"📬 Новая задача от {db_user.name}:\n{fmt_task(task)}",
+                f"📬 Нова задача від {db_user.name}:\n{fmt_task(task)}",
                 reply_markup=task_actions(task),
             )
         except Exception:
-            await message.answer("⚠️ Не удалось отправить уведомление исполнителю.")
+            await message.answer("⚠️ Не вдалося надіслати сповіщення виконавцю.")

@@ -1,4 +1,4 @@
-"""Форматирование сообщений."""
+"""Форматування повідомлень."""
 
 from datetime import datetime
 
@@ -7,7 +7,7 @@ from .db import Task
 
 def fmt_deadline(deadline: datetime | None) -> str:
     if deadline is None:
-        return "без дедлайна"
+        return "без дедлайну"
     return deadline.strftime("до %d.%m %H:%M")
 
 

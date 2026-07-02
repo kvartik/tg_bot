@@ -48,7 +48,7 @@ async def generate_routine(bot: Bot) -> None:
                 )
                 await _send(
                     bot, user.tg_id,
-                    f"🔁 Рутинная задача:\n{fmt_task(task)}",
+                    f"🔁 Рутинна задача:\n{fmt_task(task)}",
                     reply_markup=task_actions(task),
                 )
 
@@ -67,7 +67,7 @@ async def notify_overdue(bot: Bot) -> None:
                 assignee = await services.user_by_id(session, task.assignee_id)
                 await _send(
                     bot, assignee.tg_id,
-                    f"⏰ Задача просрочена!\n{fmt_task(task)}",
+                    f"⏰ Задача прострочена!\n{fmt_task(task)}",
                     reply_markup=task_actions(task),
                 )
                 task.overdue_notified = True
@@ -81,8 +81,8 @@ async def notify_overdue(bot: Bot) -> None:
                 assignee = await services.user_by_id(session, task.assignee_id)
                 await _send(
                     bot, creator.tg_id,
-                    f"🚨 {assignee.name} просрочил(а) задачу "
-                    f"более чем на {OVERDUE_REMIND_MINUTES} мин:\n{fmt_task(task)}",
+                    f"🚨 {assignee.name} прострочив(ла) задачу "
+                    f"більш ніж на {OVERDUE_REMIND_MINUTES} хв:\n{fmt_task(task)}",
                 )
                 task.escalated_notified = True
                 await session.commit()
