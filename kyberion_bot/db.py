@@ -111,10 +111,26 @@ class Task(Base):
     closed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
 
-engine = create_async_engine(DATABASE_URL, echo=False)
+engine = create_async_engine(DATABASE_URL, echo=False, pool_pre_ping=True)
 SessionLocal = async_sessionmaker(engine, expire_on_commit=False)
 
 
-async def init_db() -> None:
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+async def init_db(retries: int = 15, delay: float = 3.0) -> None:
+    # На Railway/облаках приватная сеть к БД поднимается на пару секунд позже
+    # старта контейнера — ждём с ретраями, чтобы не падать в crash-loop.
+    import asyncio
+    import logging
+
+    last_err: Exception | None = None
+    for attempt in range(1, retries + 1):
+        try:
+            async with engine.begin() as conn:
+                await conn.run_sync(Base.metadata.create_all)
+            if attempt > 1:
+                logging.info("БД доступна (с попытки %s)", attempt)
+            return
+        except Exception as e:  # noqa: BLE001 — на старте ловим любую ошибку соединения
+            last_err = e
+            logging.warning("БД пока недоступна (попытка %s/%s): %s", attempt, retries, e)
+            await asyncio.sleep(delay)
+    raise RuntimeError(f"Не удалось подключиться к БД за {retries} попыток") from last_err
