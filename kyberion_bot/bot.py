@@ -5,6 +5,7 @@ from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
 from aiogram.fsm.storage.memory import MemoryStorage
+from aiogram.types import BotCommand
 
 from .config import BOT_TOKEN, OWNER_BOT_TOKEN
 from .db import init_db
@@ -24,7 +25,10 @@ def build_dispatcher() -> Dispatcher:
 
 async def main() -> None:
     await init_db()
+    menu_commands = [BotCommand(command="menu", description="Открыть меню")]
+
     bot = Bot(BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
+    await bot.set_my_commands(menu_commands)
     dp = build_dispatcher()
     for router in routers:
         dp.include_router(router)
@@ -35,6 +39,7 @@ async def main() -> None:
 
     if OWNER_BOT_TOKEN:
         owner_bot = Bot(OWNER_BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
+        await owner_bot.set_my_commands(menu_commands)
         owner_dp = build_dispatcher()
         owner_dp.include_router(owner_router)
         # инвайт-ссылки из owner-бота ведут в основной бот

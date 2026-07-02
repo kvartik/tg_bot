@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from .. import services
 from ..db import STATUS_DECLINED, STATUS_DONE, STATUS_OPEN, Task, User
-from ..keyboards import ClubCb, TaskCb, UserCb, clubs_list, task_actions, users_list
+from ..keyboards import ClubCb, TaskCb, UserCb, clubs_list, task_actions, to_menu_kb, users_list
 from ..texts import fmt_deadline, fmt_task
 
 router = Router()
@@ -29,6 +29,17 @@ async def notify(bot: Bot, session: AsyncSession, user_id: int, text: str) -> No
         await bot.send_message(user.tg_id, text)
     except Exception:
         pass  # пользователь мог заблокировать бота
+
+
+async def notify_club_group(bot: Bot, session: AsyncSession, task: Task, text: str) -> None:
+    """Уведомление в группу клуба (если она привязана командой /bind)."""
+    club = await session.get(services.Club, task.club_id)
+    if club is None or club.chat_id is None:
+        return
+    try:
+        await bot.send_message(club.chat_id, text)
+    except Exception:
+        pass  # бота могли удалить из группы
 
 
 # ---------- Мои задачи ----------
@@ -66,7 +77,11 @@ async def cb_all_tasks(call: CallbackQuery, session: AsyncSession, db_user: User
     if total == 0:
         await call.answer("Открытых задач нет 🎉", show_alert=True)
         return
-    await call.message.answer("\n".join(lines).strip())
+    text = "\n".join(lines).strip()
+    try:
+        await call.message.edit_text(text, reply_markup=to_menu_kb())
+    except Exception:
+        await call.message.answer(text, reply_markup=to_menu_kb())
     await call.answer()
 
 
@@ -85,6 +100,9 @@ async def cb_task_done(
     await call.message.edit_text(f"✅ Выполнено: <b>{task.title}</b>")
     if task.creator_id != task.assignee_id:
         await notify(bot, session, task.creator_id, f"✅ {db_user.name} выполнил(а): <b>{task.title}</b>")
+    await notify_club_group(
+        bot, session, task, f"✅ <b>{db_user.name}</b> выполнил(а): {task.title}"
+    )
     await call.answer("Отлично!")
 
 
@@ -123,6 +141,10 @@ async def msg_decline_reason(
             bot, session, task.creator_id,
             f"🚫 {db_user.name} не может выполнить: <b>{task.title}</b>\nПричина: {reason}",
         )
+    await notify_club_group(
+        bot, session, task,
+        f"🚫 <b>{db_user.name}</b> не смог(ла): {task.title}\nПричина: {reason}",
+    )
 
 
 # ---------- Новая задача ----------
@@ -200,7 +222,8 @@ async def msg_task_deadline(
     )
     await message.answer(
         f"✅ Задача поставлена: <b>{task.title}</b>\n"
-        f"Исполнитель: {assignee.name}, {fmt_deadline(deadline)}"
+        f"Исполнитель: {assignee.name}, {fmt_deadline(deadline)}",
+        reply_markup=to_menu_kb(),
     )
     if assignee.id != db_user.id:
         try:

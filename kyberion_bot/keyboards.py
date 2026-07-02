@@ -1,8 +1,32 @@
 from aiogram.filters.callback_data import CallbackData
-from aiogram.types import InlineKeyboardMarkup
+from aiogram.types import (
+    InlineKeyboardMarkup,
+    KeyboardButton,
+    ReplyKeyboardMarkup,
+)
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from .db import ROLE_LABELS, ROLE_MANAGER, ROLE_SENIOR, Club, Task, TaskTemplate, User
+
+BACK_CB = "menu:back"
+BACK_TEXT = "⬅️ Назад"
+MENU_TEXT = "🏠 В меню"
+
+
+def main_reply_kb() -> ReplyKeyboardMarkup:
+    """Постоянная кнопка под полем ввода — открыть меню без набора команд."""
+    return ReplyKeyboardMarkup(
+        keyboard=[[KeyboardButton(text="☰ Меню")]],
+        resize_keyboard=True,
+        is_persistent=True,
+    )
+
+
+def to_menu_kb() -> InlineKeyboardMarkup:
+    """Одна кнопка «В меню» — для финальных сообщений, чтобы вернуться без команд."""
+    kb = InlineKeyboardBuilder()
+    kb.button(text=MENU_TEXT, callback_data=BACK_CB)
+    return kb.as_markup()
 
 
 # action: checkin | task | people | routine | stats | club_del
@@ -82,6 +106,16 @@ def clubs_list(clubs: list[Club], action: str) -> InlineKeyboardMarkup:
     kb = InlineKeyboardBuilder()
     for club in clubs:
         kb.button(text=club.name, callback_data=ClubCb(action=action, club_id=club.id))
+    kb.button(text=BACK_TEXT, callback_data=BACK_CB)
+    kb.adjust(1)
+    return kb.as_markup()
+
+
+def clubs_bind_kb(clubs: list[Club]) -> InlineKeyboardMarkup:
+    """Выбор клуба для привязки группы (в чате группы, без кнопки «Назад»)."""
+    kb = InlineKeyboardBuilder()
+    for club in clubs:
+        kb.button(text=club.name, callback_data=ClubCb(action="bind", club_id=club.id))
     kb.adjust(1)
     return kb.as_markup()
 
@@ -90,6 +124,7 @@ def roles_kb(club_id: int, allowed_roles: list[str]) -> InlineKeyboardMarkup:
     kb = InlineKeyboardBuilder()
     for role in allowed_roles:
         kb.button(text=ROLE_LABELS[role], callback_data=RoleCb(club_id=club_id, role=role))
+    kb.button(text=BACK_TEXT, callback_data=BACK_CB)
     kb.adjust(1)
     return kb.as_markup()
 
@@ -98,6 +133,7 @@ def users_list(users: list[User], club_id: int, action: str) -> InlineKeyboardMa
     kb = InlineKeyboardBuilder()
     for u in users:
         kb.button(text=u.name, callback_data=UserCb(action=action, club_id=club_id, user_id=u.id))
+    kb.button(text=BACK_TEXT, callback_data=BACK_CB)
     kb.adjust(1)
     return kb.as_markup()
 
@@ -119,6 +155,7 @@ def templates_list(templates: list[TaskTemplate], club_id: int) -> InlineKeyboar
             callback_data=TplCb(action="open", club_id=club_id, tpl_id=t.id),
         )
     kb.button(text="➕ Добавить", callback_data=TplCb(action="add", club_id=club_id, tpl_id=0))
+    kb.button(text=BACK_TEXT, callback_data=BACK_CB)
     kb.adjust(1)
     return kb.as_markup()
 
@@ -128,7 +165,8 @@ def template_actions(tpl: TaskTemplate, club_id: int) -> InlineKeyboardMarkup:
     toggle_text = "⏸ Выключить" if tpl.is_active else "▶️ Включить"
     kb.button(text=toggle_text, callback_data=TplCb(action="toggle", club_id=club_id, tpl_id=tpl.id))
     kb.button(text="🗑 Удалить", callback_data=TplCb(action="del", club_id=club_id, tpl_id=tpl.id))
-    kb.adjust(2)
+    kb.button(text=BACK_TEXT, callback_data=BACK_CB)
+    kb.adjust(2, 1)
     return kb.as_markup()
 
 
@@ -147,6 +185,7 @@ def people_menu(club_id: int) -> InlineKeyboardMarkup:
     kb = InlineKeyboardBuilder()
     kb.button(text="➕ Пригласить", callback_data=PeopleCb(action="invite", club_id=club_id))
     kb.button(text="➖ Удалить из клуба", callback_data=PeopleCb(action="remove", club_id=club_id))
+    kb.button(text=BACK_TEXT, callback_data=BACK_CB)
     kb.adjust(1)
     return kb.as_markup()
 
@@ -156,5 +195,6 @@ def clubs_admin_menu(clubs: list[Club]) -> InlineKeyboardMarkup:
     for club in clubs:
         kb.button(text=f"🗑 {club.name}", callback_data=ClubAdminCb(action="del", club_id=club.id))
     kb.button(text="➕ Создать клуб", callback_data=ClubAdminCb(action="new", club_id=0))
+    kb.button(text=BACK_TEXT, callback_data=BACK_CB)
     kb.adjust(1)
     return kb.as_markup()

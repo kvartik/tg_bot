@@ -41,6 +41,8 @@ class Club(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str] = mapped_column(String(100))
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    # ID группы Telegram для уведомлений о задачах клуба (NULL = не привязана)
+    chat_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
 
 
 class User(Base):
@@ -115,6 +117,17 @@ engine = create_async_engine(DATABASE_URL, echo=False, pool_pre_ping=True)
 SessionLocal = async_sessionmaker(engine, expire_on_commit=False)
 
 
+def _create_and_migrate(conn) -> None:
+    """create_all + мягкие миграции для колонок, добавленных после первого запуска.
+    create_all не добавляет колонки в уже существующие таблицы, поэтому — вручную."""
+    from sqlalchemy import inspect
+
+    Base.metadata.create_all(conn)
+    existing = {c["name"] for c in inspect(conn).get_columns("clubs")}
+    if "chat_id" not in existing:
+        conn.exec_driver_sql("ALTER TABLE clubs ADD COLUMN chat_id BIGINT")
+
+
 async def init_db(retries: int = 15, delay: float = 3.0) -> None:
     # На Railway/облаках приватная сеть к БД поднимается на пару секунд позже
     # старта контейнера — ждём с ретраями, чтобы не падать в crash-loop.
@@ -125,7 +138,7 @@ async def init_db(retries: int = 15, delay: float = 3.0) -> None:
     for attempt in range(1, retries + 1):
         try:
             async with engine.begin() as conn:
-                await conn.run_sync(Base.metadata.create_all)
+                await conn.run_sync(_create_and_migrate)
             if attempt > 1:
                 logging.info("БД доступна (с попытки %s)", attempt)
             return

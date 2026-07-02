@@ -24,8 +24,10 @@ from .keyboards import (
     clubs_admin_menu,
     clubs_list,
     confirm_kb,
+    main_reply_kb,
     owner_menu,
     people_menu,
+    to_menu_kb,
     users_list,
 )
 
@@ -44,8 +46,23 @@ async def send_menu(message: Message) -> None:
 
 
 @router.message(CommandStart())
-@router.message(Command("menu"))
 async def cmd_start(message: Message, state: FSMContext) -> None:
+    await state.clear()
+    await message.answer(
+        "👑 Бот владельца. Меню открывается кнопкой <b>«☰ Меню»</b> внизу или командой /menu.",
+        reply_markup=main_reply_kb(),
+    )
+    await send_menu(message)
+
+
+@router.message(Command("menu"))
+async def cmd_menu(message: Message, state: FSMContext) -> None:
+    await state.clear()
+    await send_menu(message)
+
+
+@router.message(F.text == "☰ Меню")
+async def txt_menu(message: Message, state: FSMContext) -> None:
     await state.clear()
     await send_menu(message)
 
@@ -53,8 +70,10 @@ async def cmd_start(message: Message, state: FSMContext) -> None:
 @router.callback_query(F.data == "menu:back")
 async def cb_back(call: CallbackQuery, state: FSMContext) -> None:
     await state.clear()
-    await call.message.delete()
-    await send_menu(call.message)
+    try:
+        await call.message.edit_text("👑 Меню владельца", reply_markup=owner_menu())
+    except Exception:
+        await call.message.answer("👑 Меню владельца", reply_markup=owner_menu())
     await call.answer()
 
 
@@ -196,5 +215,8 @@ async def cb_stats(call: CallbackQuery, session: AsyncSession) -> None:
         )
     if not clubs:
         lines.append("Клубов пока нет.")
-    await call.message.answer("\n".join(lines))
+    try:
+        await call.message.edit_text("\n".join(lines), reply_markup=to_menu_kb())
+    except Exception:
+        await call.message.answer("\n".join(lines), reply_markup=to_menu_kb())
     await call.answer()

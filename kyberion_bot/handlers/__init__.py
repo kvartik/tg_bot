@@ -1,4 +1,4 @@
-from . import people, routine, shifts, start, tasks
+from . import groups, people, routine, shifts, start, tasks
 
 routers = [
     start.router,
@@ -6,4 +6,5 @@ routers = [
     tasks.router,
     people.router,
     routine.router,
+    groups.router,
 ]

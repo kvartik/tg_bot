@@ -140,6 +140,15 @@ async def deactivate_club(session: AsyncSession, club_id: int) -> None:
         await session.commit()
 
 
+async def set_club_chat(session: AsyncSession, club_id: int, chat_id: int) -> Club | None:
+    """Привязать группу Telegram к клубу (для уведомлений о задачах)."""
+    club = await session.get(Club, club_id)
+    if club:
+        club.chat_id = chat_id
+        await session.commit()
+    return club
+
+
 # ---------- Инвайты ----------
 
 
