@@ -2,7 +2,7 @@
 После привязки в группу приходят уведомления о закрытии задач этого клуба."""
 
 from aiogram import F, Router
-from aiogram.filters import Command
+from aiogram.filters import Command, CommandStart
 from aiogram.types import CallbackQuery, Message
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -11,9 +11,20 @@ from ..db import User
 from ..keyboards import ClubCb, clubs_bind_kb
 
 router = Router()
+# Этот роутер обрабатывает только групповые чаты
+router.message.filter(F.chat.type.in_({"group", "supergroup"}))
 
 
-@router.message(Command("bind"), F.chat.type.in_({"group", "supergroup"}))
+@router.message(CommandStart())
+async def group_start(message: Message) -> None:
+    # в группе не показываем личное меню — только подсказка про /bind
+    await message.reply(
+        "В группе я присылаю уведомления о задачах клуба.\n"
+        "Чтобы привязать эту группу к клубу — напишите /bind (может управляющий или старший админ)."
+    )
+
+
+@router.message(Command("bind"))
 async def cmd_bind(message: Message, session: AsyncSession, db_user: User) -> None:
     clubs = await services.supervisor_clubs(session, db_user)
     if not clubs:

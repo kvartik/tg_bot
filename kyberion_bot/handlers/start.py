@@ -9,6 +9,9 @@ from ..db import ROLE_ADMIN, ROLE_LABELS, User
 from ..keyboards import main_menu, main_reply_kb, to_menu_kb
 
 router = Router()
+# Личные команды и меню работают только в личке.
+# В группах бот отвечает только на /bind и шлёт уведомления (см. handlers/groups.py).
+router.message.filter(F.chat.type == "private")
 
 
 async def _menu_content(session: AsyncSession, db_user: User):
@@ -20,15 +23,6 @@ async def _menu_content(session: AsyncSession, db_user: User):
 async def send_menu(message: Message, session: AsyncSession, db_user: User) -> None:
     text, markup = await _menu_content(session, db_user)
     await message.answer(text, reply_markup=markup)
-
-
-async def edit_to_menu(call: CallbackQuery, session: AsyncSession, db_user: User) -> None:
-    """Показать меню, переиспользуя текущее сообщение (без лишних сообщений в чате)."""
-    text, markup = await _menu_content(session, db_user)
-    try:
-        await call.message.edit_text(text, reply_markup=markup)
-    except Exception:
-        await call.message.answer(text, reply_markup=markup)
 
 
 @router.message(CommandStart())
@@ -74,7 +68,13 @@ async def cb_back(
     call: CallbackQuery, session: AsyncSession, db_user: User, state: FSMContext
 ) -> None:
     await state.clear()
-    await edit_to_menu(call, session, db_user)
+    # удаляем текущий экран и показываем меню новым сообщением внизу,
+    # чтобы взаимодействие всегда было на последнем сообщении
+    try:
+        await call.message.delete()
+    except Exception:
+        pass
+    await send_menu(call.message, session, db_user)
     await call.answer()
 
 

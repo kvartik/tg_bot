@@ -51,7 +51,11 @@ async def cb_my_tasks(call: CallbackQuery, session: AsyncSession, db_user: User)
     if not tasks:
         await call.answer("Открытых задач нет 🎉", show_alert=True)
         return
-    await call.message.answer(f"📋 Открытых задач: {len(tasks)}")
+    # заменяем сообщение меню заголовком, чтобы над карточками не висело «живое» меню
+    try:
+        await call.message.edit_text(f"📋 Открытых задач: {len(tasks)}")
+    except Exception:
+        await call.message.answer(f"📋 Открытых задач: {len(tasks)}")
     for task in tasks:
         await call.message.answer(fmt_task(task), reply_markup=task_actions(task))
     await call.answer()

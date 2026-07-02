@@ -71,9 +71,10 @@ async def txt_menu(message: Message, state: FSMContext) -> None:
 async def cb_back(call: CallbackQuery, state: FSMContext) -> None:
     await state.clear()
     try:
-        await call.message.edit_text("👑 Меню владельца", reply_markup=owner_menu())
+        await call.message.delete()
     except Exception:
-        await call.message.answer("👑 Меню владельца", reply_markup=owner_menu())
+        pass
+    await send_menu(call.message)
     await call.answer()
 
 
